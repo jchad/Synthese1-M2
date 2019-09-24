@@ -314,6 +314,11 @@ public:
         m_meshes[0].bounds(pmin, pmax);
         m_camera.lookat(pmin, pmax);
 
+        frames.push_back(0);
+        t0 = global_time()/(1000.f/24.f);
+        t1 = t0 + 1000/24.f;
+        dt = 0;
+
         m_program = read_program("tutos/tp1_keyframes.glsl");
         program_print_errors(m_program);
 
@@ -358,16 +363,12 @@ public:
             clear_key_state('a');
             frames.push_back(0);
         }
-        if((t0 == -1 && t1 == -1) || dt >= 1) {
-            if(dt >= 1) {
-                frame++;
-                //std::for_each(frames.begin(), frames.end(),) [](int &n){ n++; });
-            }
+        if(dt >= 1) {
+            std::for_each(frames.begin(), frames.end(), [](int &n){ n = (n+1)%22; });
             t0 = global_time()/(1000.f/24.f);
             t1 = t0 + 1000/24.f;
         }
-        if(frame == 22) frame = 0;
-        std::for_each(frames.begin(), frames.end(), [](int &n){ if(n == 22) n = 0;});
+
 
         Transform view = m_camera.view();
         Transform projection = m_camera.projection(window_width(), window_height(), 45);
@@ -392,8 +393,9 @@ public:
         // dessiner les triangles de l'objet
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_objet.materials_buffer);
 
+
         for (size_t i = 0 ; i < frames.size() ; i++) {
-            Transform model = Identity() * (i * Translation(0,20,0)) * RotationZ(i * (360/frames.size()));
+            Transform model = Identity() * Translation(i*5, 0,0) /* * RotationY(i * (360/frames.size()))*/;
             Transform mvp = projection * view * model;
             location= glGetUniformLocation(m_program, "modelMatrix");
             glUniformMatrix4fv(location, 1, GL_TRUE, model.buffer());
@@ -411,9 +413,8 @@ protected:
     Buffers m_objet;
     GLuint m_program;
     Orbiter m_camera;
-    int frame = 0;
     std::vector<int> frames ;
-    float t0 = -1,t1 = -1, dt = 0.f;
+    float t0,t1,dt;
 };
 
 
