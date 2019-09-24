@@ -201,6 +201,7 @@ tutos/shader_reflect.txt
 tutos/storage.glsl
 tutos/storage_texture_display.glsl
 tutos/texcoords.glsl
+tutos/tp1_static.glsl
 tutos/tuto1.cpp
 tutos/tuto1.txt
 tutos/tuto10.cpp

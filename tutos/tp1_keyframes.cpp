@@ -96,9 +96,74 @@ struct Buffers
 
         glBufferSubData(GL_ARRAY_BUFFER, offset, mesh.texcoord_buffer_size(), mesh.texcoord_buffer());
 
+
+
         // conserve le nombre de sommets
         count= mesh.vertex_count();
     }
+
+    void create2( const Mesh& mesh )
+    {
+        if(!mesh.vertex_buffer_size()) return;
+
+        // cree et configure le vertex array object: conserve la description des attributs de sommets
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
+
+        // cree et initialise le buffer: conserve la positions des sommets
+        glGenBuffers(1, &buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+
+        size_t size = mesh.vertex_buffer_size() + mesh.texcoord_buffer_size();
+        glBufferData(GL_ARRAY_BUFFER, size, nullptr, GL_STATIC_DRAW);
+
+        //transfere les positions des sommets
+        size_t offset = 0;
+        size = mesh.vertex_buffer_size();
+        size_t stride = sizeof(vec3) + sizeof(vec2);
+
+
+
+        // attribut 0, position des sommets, declare dans le vertex shader : in vec3 position;
+        glVertexAttribPointer(0,
+            3, GL_FLOAT,    // size et type, position est un vec3 dans le vertex shader
+            GL_FALSE,       // pas de normalisation des valeurs
+            0,              // stride 0, les valeurs sont les unes a la suite des autres
+            (const GLvoid *)0               // offset 0, les valeurs sont au debut du buffer
+        );
+        glEnableVertexAttribArray(0);
+
+        glBufferSubData(GL_ARRAY_BUFFER, offset,  mesh.vertex_buffer_size(), mesh.vertex_buffer());
+
+        offset = offset + size;
+        //offset = size;
+        size= mesh.texcoord_buffer_size();
+
+        // et configure l'attribut 1, vec2 texcoord
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, /* stride */ 0, (const GLvoid *) offset);
+        glEnableVertexAttribArray(1);
+
+        glBufferSubData(GL_ARRAY_BUFFER, offset, mesh.texcoord_buffer_size(), mesh.texcoord_buffer());
+
+        std::vector<materialData> data(mesh.triangle_count());
+        std::vector<unsigned int> mats = mesh.materials();
+        for (int i=0; i < mesh.triangle_count(); i++) {
+            data[i].ambient = glsl::vec4(mesh.mesh_material(mats[i]).emission);
+            data[i].diffuse = glsl::vec4(mesh.mesh_material(mats[i]).diffuse);
+            data[i].specular = glsl::vec4(mesh.mesh_material(mats[i]).specular);
+            data[i].ns = glsl::gfloat(mesh.mesh_material(mats[i]).ns);
+        }
+
+        glGenBuffers(1, &materials_buffer);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, materials_buffer);
+
+        glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(materialData) * data.size(), data.data(), GL_STREAM_READ);
+
+        // conserve le nombre de sommets
+        count= mesh.vertex_count();
+    }
+
+
 
     void create2keyframes( const Mesh& m1, const Mesh& m2)
     {
@@ -310,9 +375,13 @@ public:
 
         m_objet.createkeyframes(m_meshes);
 
-        Point pmin, pmax;
+        m_floor = read_mesh("data/floor30x30.obj");
+        m_objet2.create2(m_floor);
+
+        Point pmin, pmax, pmin2, pmax2;
         m_meshes[0].bounds(pmin, pmax);
-        m_camera.lookat(pmin, pmax);
+        m_floor.bounds(pmin2, pmax2);
+        m_camera.lookat(min(pmin, pmin2), max(pmax, pmax2));
 
         frames.push_back(0);
         t0 = global_time()/(1000.f/24.f);
@@ -321,6 +390,9 @@ public:
 
         m_program = read_program("tutos/tp1_keyframes.glsl");
         program_print_errors(m_program);
+
+        m_program2 = read_program("tutos/tp1_static.glsl");
+        program_print_errors(m_program2);
 
 
         // etat openGL par defaut
@@ -338,7 +410,9 @@ public:
     int quit( )
     {
         m_objet.release();
+        m_objet2.release();
         release_program(m_program);
+        release_program(m_program2);
 
         return 0;
     }
@@ -362,6 +436,10 @@ public:
         else if (key_state('a')){
             clear_key_state('a');
             frames.push_back(0);
+            Point pmin, pmax, pmin2, pmax2;
+            m_meshes[0].bounds(pmin, pmax);
+            m_floor.bounds(pmin2, pmax2);
+            m_camera.lookat(min(pmin, pmin2), max(Translation((frames.size() - 1) * 20, 0 ,0)(pmax), pmax2));
         }
         if(dt >= 1) {
             std::for_each(frames.begin(), frames.end(), [](int &n){ n = (n+1)%22; });
@@ -387,7 +465,7 @@ public:
         location= glGetUniformLocation(m_program, "invViewMatrix");
         glUniformMatrix4fv(location, 1, GL_TRUE, invView.buffer());
         location= glGetUniformLocation(m_program, "lightPos");
-        glUniform4f(location,250.f,0.f,50.f,1.f);
+        glUniform4f(location,250.f,50.f,0.f,1.f);
         location= glGetUniformLocation(m_program, "lightColor");
         glUniform4f(location,1.f,1.f,1.f,1.f);
         // dessiner les triangles de l'objet
@@ -395,7 +473,7 @@ public:
 
 
         for (size_t i = 0 ; i < frames.size() ; i++) {
-            Transform model = Identity() * Translation(i*5, 0,0) /* * RotationY(i * (360/frames.size()))*/;
+            Transform model = Identity() * Translation(i*5, 0,0)  * RotationY(i * (360/frames.size()));
             Transform mvp = projection * view * model;
             location= glGetUniformLocation(m_program, "modelMatrix");
             glUniformMatrix4fv(location, 1, GL_TRUE, model.buffer());
@@ -404,14 +482,37 @@ public:
             glDrawArrays(GL_TRIANGLES, frames[i] * 2 * m_objet.count , m_objet.count);
         }
 
+        glUseProgram(m_program2);
+        glBindVertexArray(m_objet2.vao);
+
+        location= glGetUniformLocation(m_program2, "viewMatrix");
+        glUniformMatrix4fv(location, 1, GL_TRUE, view.buffer());
+        location= glGetUniformLocation(m_program2, "invViewMatrix");
+        glUniformMatrix4fv(location, 1, GL_TRUE, invView.buffer());
+        location= glGetUniformLocation(m_program2, "lightPos");
+        glUniform4f(location,250.f,50.f,0.f,1.f);
+        location= glGetUniformLocation(m_program2, "lightColor");
+        glUniform4f(location,1.f,1.f,1.f,1.f);
+        // dessiner les triangles de l'objet
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_objet2.materials_buffer);
+
+        Transform model = Identity();
+        Transform mvp = projection * view * model;
+        location= glGetUniformLocation(m_program2, "modelMatrix");
+        glUniformMatrix4fv(location, 1, GL_TRUE, model.buffer());
+        location= glGetUniformLocation(m_program2, "mvpMatrix");
+        glUniformMatrix4fv(location, 1, GL_TRUE, mvp.buffer());
+        glDrawArrays(GL_TRIANGLES, 0 , m_objet2.count);
+
 
         return 1;
     }
 
 protected:
     std::vector<Mesh> m_meshes;
-    Buffers m_objet;
-    GLuint m_program;
+    Mesh m_floor;
+    Buffers m_objet, m_objet2;
+    GLuint m_program, m_program2;
     Orbiter m_camera;
     std::vector<int> frames ;
     float t0,t1,dt;
