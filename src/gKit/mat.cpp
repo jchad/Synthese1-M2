@@ -236,6 +236,19 @@ Transform Perspective( const float fov, const float aspect, const float znear, c
                   0,    0,              -1,                 0);
 }
 
+Transform Ortho( const float left, const float right, const float bottom, const float top, const float znear, const float zfar )
+{
+    float tx= - (right + left) / (right - left);
+    float ty= - (top + bottom) / (top - bottom);
+    float tz= - (zfar + znear) / (zfar - znear);
+
+    return Transform(
+        2.f / (right - left),                    0,                     0, tx,
+                           0, 2.f / (top - bottom),                     0, ty,
+        0,                                       0, -2.f / (zfar - znear), tz,
+        0,                                       0,                     0, 1);
+}
+
 Transform Viewport( const float width, const float height )
 {
     float w= width / 2.f;

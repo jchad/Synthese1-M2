@@ -86,6 +86,8 @@ Transform Rotation( const Vector& axis, const float angle );
 Transform Viewport( const float width, const float height );
 //! renvoie la matrice representant une transformation projection perspective.
 Transform Perspective( const float fov, const float aspect, const float znear, const float zfar );
+//! renvoie la matrice representant une transformation projection orthographique.
+Transform Ortho( const float left, const float right, const float bottom, const float top, const float znear, const float zfar );
 //! renvoie la matrice representant le placement et l'orientation d'une camera pour observer le point to.
 Transform Lookat( const Point& from, const Point& to, const Vector& up );
 
