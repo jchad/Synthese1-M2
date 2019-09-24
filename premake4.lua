@@ -146,7 +146,8 @@ tutos = {
 	"tuto_storage_buffer",
 	"tuto_storage_texture",
 	"min_data",
-	"tuto_vertex_compute"
+	"tuto_vertex_compute",
+	"tp1_keyframes"
 }
 
 for i, name in ipairs(tutos) do

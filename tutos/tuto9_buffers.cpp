@@ -114,7 +114,7 @@ public:
         
         // etape 2 : dessiner m_objet avec le shader program
     
-        // . recuperer les transformations
+        // . recuperer les transformationsabel( Widgets& widgets, const char *format, ... );
         Transform model= RotationX(global_time() / 20);
         Transform view= m_camera.view();
         Transform projection= m_camera.projection(window_width(), window_height(), 45);
