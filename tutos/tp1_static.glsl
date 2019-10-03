@@ -18,21 +18,23 @@ uniform mat4 modelMatrix;
 uniform mat4 viewMaxtrix;
 uniform mat4 invViewMatrix;
 uniform vec4 lightPos;
-uniform float dt;
+uniform mat4 sourceMatrix;
 
 out vec3 n;
 out vec3 l;
 out vec3 v;
+out vec3 p;
 
 void main( )
 {
-    vec3 p= position;
-    gl_Position= mvpMatrix * vec4(p, 1);
+    vec3 pos= position;
+    gl_Position= mvpMatrix * vec4(pos, 1);
 
 
     n = mat3(modelMatrix) * normal;
-    l = vec3(lightPos) - vec3(modelMatrix * vec4(p, 1));
-    v = vec3(invViewMatrix * vec4(0,0,0,1)) - vec3(modelMatrix * vec4(p, 1));
+    l = vec3(lightPos) - vec3(modelMatrix * vec4(pos, 1));
+    v = vec3(invViewMatrix * vec4(0,0,0,1)) - vec3(modelMatrix * vec4(pos, 1));
+    p = vec3(sourceMatrix * vec4(pos + (0.1 * normal),1));
 }
 
 #endif
@@ -41,12 +43,27 @@ void main( )
 #ifdef FRAGMENT_SHADER
 out vec4 fragment_color;
 uniform vec4 lightColor;
+uniform sampler2D shadowMap;
 in vec3 n;
 in vec3 l;
 in vec3 v;
+in vec3 p;
 
 void main( )
 {
+//    fragment_color= vec4(p.xy, 0, 1);
+//            return;
+
+    float depth = texture(shadowMap, p.xy).x;
+
+    float shadow;
+
+    if (depth < p.z) {
+        shadow = 0.2f;
+    } else {
+        shadow = 1.f;
+    }
+
     vec3 N = normalize(n);
     vec3 L = normalize(l);
     vec3 V = normalize(v);
@@ -67,9 +84,9 @@ void main( )
     //float spec = pow(max(dot(reflectDir, V), 0.0), data[gl_PrimitiveID].shininess);
     vec3 specular = vec3(lightColor * (spec * data[gl_PrimitiveID].specular));
 
-    vec3 result = ambient + diffuse + specular;
+    vec3 result = diffuse + specular * diff;
 
-    fragment_color= vec4(result,1);
+    fragment_color= vec4(shadow * result,1);
 }
 
 #endif
