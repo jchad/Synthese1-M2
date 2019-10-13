@@ -208,3 +208,12 @@ for i, name in ipairs(tutosM2) do
 		files ( gkit_files )
 		files { gkit_dir .. "/tutos/M2/" .. name..'.cpp' }
 end
+
+project("projet")
+    language "C++"
+	kind "ConsoleApp"
+	targetdir "bin"
+	files ( gkit_files )
+	files { gkit_dir .. "/projet/*.cpp"}
+	files { gkit_dir .. "/projet/*.hpp"}
+	files { gkit_dir .. "/projet/*.h"}
