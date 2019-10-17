@@ -1,3 +1,4 @@
+#define N_RAY 32
 
 #include <cfloat>
 #include <random>
@@ -151,34 +152,73 @@ struct Source
 {
     Point a, b, c;
     Color emission;
-    
-    Source( ) {}
-    Source( const TriangleData& data, const Color& color ) : a(data.a), b(data.b), c(data.c), emission(color) {}
+    Vector n;
+    float area;
+
+    Source( ) : a(), b(), c(), emission(), n(), area() {}
+
+    Source( const TriangleData& data, const Color& color ) : a(data.a), b(data.b), c(data.c), emission(color)
+    {
+       // normale geometrique du triangle abc, produit vectoriel des aretes ab et ac
+        Vector ng= cross(Vector(a, b), Vector(a, c));
+        n= normalize(ng);
+        area= length(ng) / 2;
+    }
+
+    Point sample( const float u1, const float u2 ) const
+    {
+        // cf GI compemdium eq 18
+        float r1= std::sqrt(u1);
+        float alpha= 1 - r1;
+        float beta= (1 - u2) * r1;
+        float gamma= u2 * r1;
+        return alpha*a + beta*b + gamma*c;
+    }
+
+    float pdf( const Point& p ) const
+    {
+        // todo : devrait renvoyer 0 pour les points a l'exterieur du triangle...
+        return 1.f / area;
+    }
 };
+
 
 struct Sources
 {
     std::vector<Source> sources;
-    
+    float emission;     // emission totale des sources
+    float area;         // aire totale des sources
+
     Sources( const Mesh& mesh ) : sources()
     {
         build(mesh);
-        
+
         printf("%d sources\n", int(sources.size()));
         assert(sources.size());
     }
-    
+
     void build( const Mesh& mesh )
     {
+        area= 0;
+        emission= 0;
         sources.clear();
         for(int id= 0; id < mesh.triangle_count(); id++)
         {
             const TriangleData& data= mesh.triangle(id);
             const Material& material= mesh.triangle_material(id);
             if(material.emission.power() > 0)
-                sources.push_back( Source(data, material.emission) );
+            {
+                Source source(data, material.emission);
+                emission= emission + source.area * source.emission.power();
+                area= area + source.area;
+
+                sources.push_back(source);
+            }
         }
     }
+
+    int size( ) const { return int(sources.size()); }
+    const Source& operator() ( const int id ) const { return sources[id]; }
 };
 
 
@@ -265,46 +305,91 @@ int main( const int argc, const char **argv )
         
         for(int px= 0; px < image.width(); px++)
         {
-            Color color= Black();
-            
+            Color true_color= Black();
             // generer le rayon pour le pixel (x, y)
             float x= px + u01(rng);
             float y= py + u01(rng);
-            
+
             Point o = invImg(Point(x, y, 0)); // origine dans l'image
             Point e = invImg(Point(x, y, 1)); // extremite dans l'image
-            
+
             Ray ray(o, e);
-            // calculer les intersections 
+            // calculer les intersections
             if(Hit hit= bvh.intersect(ray))
             {
                 const TriangleData& triangle= mesh.triangle(hit.triangle_id);           // recuperer le triangle
                 const Material& material= mesh.triangle_material(hit.triangle_id);      // et sa matiere
-                
+
                 Point p= point(hit, ray);               // point d'intersection
                 Vector pn= normal(hit, triangle);       // normale interpolee du triangle au point d'intersection
                 // retourne la normale pour faire face a la camera / origine du rayon...
                 if(dot(pn, ray.d) > 0)
                     pn= -pn;
-                
-                for (int i = 0; i < sources.sources.size() ; i++) {
-                    Point es((sources.sources[i].a + sources.sources[i].b + sources.sources[i].c)/3.0f);
-                    Vector sn = normalize(cross(sources.sources[i].b - sources.sources[i].a, sources.sources[i].c - sources.sources[i].a));
-                    Ray rayS(p + 0.00001 * pn, es + 0.00001 * sn);
-                    if (bvh.visible(rayS)){
-                        // accumuler la couleur de l'echantillon
 
-                        if(dot(sn, rayS.d) > 0)
-                            sn= -sn;
-                        float cos_theta_p= std::max(0.f, dot(pn, normalize(rayS.d)));
-                        float cos_theta_e= std::max(0.f, dot(sn, normalize(-rayS.d)));
-                        color= color + ((1.f / float(M_PI) * material.diffuse * (cos_theta_e * cos_theta_p) / distance2(es, p))* sources.sources[i].emission)/sources.sources.size();
-                    }
+                World wp(pn);
+
+                for (int j = 0 ; j < N_RAY ; j++){
+
+                    Color color = Black();
+
+                    float r1 = u01(rng);
+                    float r2 = u01(rng);
+
+                    float phi = 2 * M_PI * r1;
+                    float theta = std::acos(r2);
+
+                    float xd = std::cos(2 * (float)M_PI * r1) * std::sqrt(1 - r2*r2);
+                    float yd = std::sin(2 * (float)M_PI * r1) * std::sqrt(1 - r2*r2);
+                    float zd = r2;
+
+                    Vector d(xd, yd, zd);
+
+                    Vector dworld = wp(d);
+
+
+                     Ray rayS(p, dworld);
+
+                     color = color + ((1.f / M_PI) * material.diffuse * bvh.visible(rayS)) * (2.f * M_PI);
+
+
+                     true_color = true_color + (1.f/N_RAY) * color;
+
                 }
 
+
+                //Commenter la suite
+                /*for (int j = 0 ; j < N_RAY ; j++) {
+                    Color color= Black();
+                    for (int i = 0; i < sources.sources.size() ; i++) {
+                        float r1 = u01(rng);
+                        float r2 = u01(rng);
+                        Point esa = sources.sources[i].sample(r1,r2);
+                       // Point es((sources.sources[i].a + sources.sources[i].b + sources.sources[i].c)/3.0f);
+                        Vector sn = normalize(cross(sources.sources[i].b - sources.sources[i].a, sources.sources[i].c - sources.sources[i].a));
+                        Ray rayS(p + 0.00001 * pn, esa + 0.00001 * sn);
+                        if (bvh.visible(rayS)){
+                            // accumuler la couleur de l'echantillon
+                            if(dot(sn, rayS.d) > 0)
+                                sn= -sn;
+                            float cos_theta_p= std::max(0.f, dot(pn, normalize(rayS.d)));
+                            float cos_theta_e= std::max(0.f, dot(sn, normalize(-rayS.d)));
+                            float cos_theta = cos_theta_e * cos_theta_p;
+                            Color contribution = (1.f / float(M_PI) * material.diffuse * cos_theta / distance2(esa, p));
+                            Color contributionPond = (((contribution * sources.sources[i].emission)/sources.size()) / sources.sources[i].pdf(esa));
+                            color= color + contributionPond;
+                        }
+                    }
+
+                    true_color = true_color + (1.f/N_RAY) * color;
+
+                }*/
             }
+            //float gamma_tone = 2.2f;
+
+            //true_color = Color(std::pow(true_color.r, (1.f/gamma_tone)), std::pow(true_color.g, (1.f/gamma_tone)), std::pow(true_color.b, (1.f/gamma_tone)), std::pow(true_color.a, (1.f/gamma_tone)));
+
             
-            image(px, py)= Color(color, 1);
+            image(px, py)= Color(true_color, 1);
         }
     }
     
