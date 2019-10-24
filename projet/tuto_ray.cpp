@@ -1,4 +1,4 @@
-#define N_RAY 32
+#define N_RAY 1024
 
 #include <cfloat>
 #include <random>
@@ -252,6 +252,26 @@ struct World
     Vector n;
 };
 
+Color occlusion(const Color &mat, const BVH & bvh, const float &r1, const float &r2, const Vector &pn, const Point &p) {
+    World wp(pn);
+
+    float phi = 2 * M_PI * r1;
+
+    float xd = std::cos(phi) * std::sqrt(1 - r2);
+    float yd = std::sin(phi) * std::sqrt(1 - r2);
+    float zd = std::sqrt(r2);
+
+    Vector d(xd, yd, zd);
+
+    Vector dworld = wp(d);
+
+    float cos_theta = std::max(0.f, dot(pn, normalize(dworld)));
+    Ray rayS(p + 0.001f * pn, dworld);
+
+    return mat * bvh.visible(rayS);
+}
+
+
 
 int main( const int argc, const char **argv )
 {
@@ -306,65 +326,36 @@ int main( const int argc, const char **argv )
         for(int px= 0; px < image.width(); px++)
         {
             Color true_color= Black();
-            // generer le rayon pour le pixel (x, y)
-            float x= px + u01(rng);
-            float y= py + u01(rng);
+            for (int j = 0 ; j < N_RAY ; j++){
+                // generer le rayon pour le pixel (x, y)
+                float x= px + u01(rng);
+                float y= py + u01(rng);
 
-            Point o = invImg(Point(x, y, 0)); // origine dans l'image
-            Point e = invImg(Point(x, y, 1)); // extremite dans l'image
+                Point o = invImg(Point(x, y, 0)); // origine dans l'image
+                Point e = invImg(Point(x, y, 1)); // extremite dans l'image
 
-            Ray ray(o, e);
-            // calculer les intersections
-            if(Hit hit= bvh.intersect(ray))
-            {
-                const TriangleData& triangle= mesh.triangle(hit.triangle_id);           // recuperer le triangle
-                const Material& material= mesh.triangle_material(hit.triangle_id);      // et sa matiere
+                Ray ray(o, e);
+                // calculer les intersections
+                if(Hit hit= bvh.intersect(ray))
+                {
+                    const TriangleData& triangle= mesh.triangle(hit.triangle_id);           // recuperer le triangle
+                    const Material& material= mesh.triangle_material(hit.triangle_id);      // et sa matiere
 
-                Point p= point(hit, ray);               // point d'intersection
-                Vector pn= normal(hit, triangle);       // normale interpolee du triangle au point d'intersection
-                // retourne la normale pour faire face a la camera / origine du rayon...
-                if(dot(pn, ray.d) > 0)
-                    pn= -pn;
+                    Point p= point(hit, ray);               // point d'intersection
+                    Vector pn= normal(hit, triangle);       // normale interpolee du triangle au point d'intersection
 
-                World wp(pn);
+                    
+                    // retourne la normale pour faire face a la camera / origine du rayon...
+                    if(dot(pn, ray.d) > 0)
+                        pn= -pn;
 
-                for (int j = 0 ; j < N_RAY ; j++){
+                    true_color = true_color + (1.f/N_RAY) * occlusion(material.diffuse, bvh, u01(rng), u01(rng), pn, p);
 
-                    Color color = Black();
-
-                    float r1 = u01(rng);
-                    float r2 = u01(rng);
-
-                    float phi = 2 * M_PI * r1;
-                    float theta = std::acos(r2);
-
-                    float xd = std::cos(2 * (float)M_PI * r1) * std::sqrt(1 - r2*r2);
-                    float yd = std::sin(2 * (float)M_PI * r1) * std::sqrt(1 - r2*r2);
-                    float zd = r2;
-
-                    Vector d(xd, yd, zd);
-
-                    Vector dworld = wp(d);
-
-
-                     Ray rayS(p, dworld);
-
-                     color = color + ((1.f / M_PI) * material.diffuse * bvh.visible(rayS)) * (2.f * M_PI);
-
-
-                     true_color = true_color + (1.f/N_RAY) * color;
-
-                }
-
-
-                //Commenter la suite
-                /*for (int j = 0 ; j < N_RAY ; j++) {
                     Color color= Black();
                     for (int i = 0; i < sources.sources.size() ; i++) {
                         float r1 = u01(rng);
                         float r2 = u01(rng);
                         Point esa = sources.sources[i].sample(r1,r2);
-                       // Point es((sources.sources[i].a + sources.sources[i].b + sources.sources[i].c)/3.0f);
                         Vector sn = normalize(cross(sources.sources[i].b - sources.sources[i].a, sources.sources[i].c - sources.sources[i].a));
                         Ray rayS(p + 0.00001 * pn, esa + 0.00001 * sn);
                         if (bvh.visible(rayS)){
@@ -379,15 +370,11 @@ int main( const int argc, const char **argv )
                             color= color + contributionPond;
                         }
                     }
+                }
+                //float gamma_tone = 2.2f;
 
-                    true_color = true_color + (1.f/N_RAY) * color;
-
-                }*/
+                //true_color = Color(std::pow(true_color.r, (1.f/gamma_tone)), std::pow(true_color.g, (1.f/gamma_tone)), std::pow(true_color.b, (1.f/gamma_tone)), std::pow(true_color.a, (1.f/gamma_tone)));
             }
-            //float gamma_tone = 2.2f;
-
-            //true_color = Color(std::pow(true_color.r, (1.f/gamma_tone)), std::pow(true_color.g, (1.f/gamma_tone)), std::pow(true_color.b, (1.f/gamma_tone)), std::pow(true_color.a, (1.f/gamma_tone)));
-
             
             image(px, py)= Color(true_color, 1);
         }

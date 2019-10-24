@@ -217,3 +217,12 @@ project("projet")
 	files { gkit_dir .. "/projet/*.cpp"}
 	files { gkit_dir .. "/projet/*.hpp"}
 	files { gkit_dir .. "/projet/*.h"}
+    
+project("directions")
+    language "C++"
+	kind "ConsoleApp"
+	targetdir "bin"
+	files ( gkit_files )
+	files { gkit_dir .. "/directions/*.cpp"}
+	files { gkit_dir .. "/directions/*.hpp"}
+	files { gkit_dir .. "/directions/*.h"}
